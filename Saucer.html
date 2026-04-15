@@ -179,11 +179,11 @@
         'use strict';
         
         const CONFIG = {
-            pixelRatio: Math.min(window.devicePixelRatio, 1.5),
-            bloomStrength: 2.2, bloomRadius: 0.4, bloomThreshold: 0.06,
-            maxDt: 0.033, particleCount: 180, baseEnemyCount: 2, loadingDuration: 600,
-            saucerSpeed: 95, saucerMaxSpeed: 42, saucerDamping: 0.91, laserCooldown: 0.1, laserSpeed: 110,
-            activationRadius: 3.5
+            pixelRatio: Math.min(window.devicePixelRatio, 2),
+            bloomStrength: 2.5, bloomRadius: 0.5, bloomThreshold: 0.05,
+            maxDt: 0.04, particleCount: 220, baseEnemyCount: 2, loadingDuration: 900,
+            saucerSpeed: 120, saucerMaxSpeed: 55, saucerDamping: 0.89, laserCooldown: 0.08, laserSpeed: 140,
+            activationRadius: 4.0, enemySpawnInterval: 4000, enemySpeed: 6.5, chaseSpeed: 8.0
         };
 
         const LEVELS = [
@@ -437,11 +437,11 @@
                 this.velocity.multiplyScalar(CONFIG.saucerDamping);
                 this.mesh.position.addScaledVector(this.velocity, dt);
                 
-                // Smooth rotation towards movement direction
-                const targetRotZ = -this.velocity.x * 0.03;
-                const targetRotX = this.velocity.z * 0.02;
-                this.mesh.rotation.z += (targetRotZ - this.mesh.rotation.z) * 0.15;
-                this.mesh.rotation.x += (targetRotX - this.mesh.rotation.x) * 0.15;
+                // Smooth rotation towards movement direction with better responsiveness
+                const targetRotZ = -this.velocity.x * 0.04;
+                const targetRotX = this.velocity.z * 0.03;
+                this.mesh.rotation.z += (targetRotZ - this.mesh.rotation.z) * 0.18;
+                this.mesh.rotation.x += (targetRotX - this.mesh.rotation.x) * 0.18;
                 
                 // Bounds checking
                 this.mesh.position.x = Math.max(-18, Math.min(18, this.mesh.position.x));
@@ -469,14 +469,14 @@
                 }
                 // Animate glow
                 this.glowMat.opacity = 0.1 + Math.sin(time * 4) * 0.08;
-                // Camera follow with smooth lerp - improved responsiveness
+                // Camera follow with smooth lerp - improved responsiveness and better framing
                 const camTarget = new THREE.Vector3(
-                    this.mesh.position.x * 0.35, 
-                    this.mesh.position.y + 9, 
-                    this.mesh.position.z + 16
+                    this.mesh.position.x * 0.4, 
+                    this.mesh.position.y + 10, 
+                    this.mesh.position.z + 18
                 );
-                camera.position.lerp(camTarget, 0.1);
-                camera.lookAt(this.mesh.position.x * 0.2, this.mesh.position.y + 1, this.mesh.position.z);
+                camera.position.lerp(camTarget, 0.12);
+                camera.lookAt(this.mesh.position.x * 0.25, this.mesh.position.y + 1.5, this.mesh.position.z * 0.3);
                 // Screen shake decay
                 if(STATE.screenShake > 0) {
                     STATE.screenShake -= dt * 5;
@@ -516,11 +516,18 @@
         const laserMat = new THREE.MeshBasicMaterial({ color:0x00ffff, transparent:true, opacity:0.9 });
         
         function fireLaser() {
-            const cooldown = STATE.rapidFire ? CONFIG.laserCooldown * 0.4 : CONFIG.laserCooldown;
+            const cooldown = STATE.rapidFire ? CONFIG.laserCooldown * 0.35 : CONFIG.laserCooldown;
             if(saucer.energy < 4 || saucer.cooldown > 0) return;
             saucer.energy -= 4;
             saucer.cooldown = cooldown;
             Audio.playLaser();
+            
+            // Add screen flash effect on laser fire
+            const flash = document.getElementById('flash-overlay');
+            flash.style.background = 'rgba(0,255,255,0.15)';
+            flash.style.opacity = 0.3;
+            setTimeout(() => flash.style.opacity = 0, 60);
+            
             for(let side of [-1, 1]) {
                 const laser = new THREE.Mesh(laserGeo, laserMat);
                 const startPos = saucer.mesh.position.clone();
@@ -529,7 +536,13 @@
                 startPos.z += 0.4;
                 laser.position.copy(startPos);
                 laser.rotation.x = Math.PI / 2;
-                laser.userData = { velocity: new THREE.Vector3(0, 0, -CONFIG.laserSpeed), life: 1.2, damage: 1 };
+                laser.userData = { velocity: new THREE.Vector3(0, 0, -CONFIG.laserSpeed), life: 1.5, damage: 1 };
+                
+                // Add laser trail glow
+                const glow = new THREE.PointLight(0x00ffff, 0.8, 4);
+                glow.position.set(0, 0, -1);
+                laser.add(glow);
+                
                 scene.add(laser);
                 lasers.push(laser);
             }
@@ -541,6 +554,12 @@
                 const laser = lasers[i];
                 laser.position.addScaledVector(laser.userData.velocity, dt);
                 laser.userData.life -= dt;
+                
+                // Animate laser glow
+                if(laser.children[0] && laser.children[0].isPointLight) {
+                    laser.children[0].intensity = 0.6 + Math.sin(STATE.time * 20 + i) * 0.3;
+                }
+                
                 if(laser.userData.life <= 0 || Math.abs(laser.position.z) > 50 || Math.abs(laser.position.x) > 30) {
                     scene.remove(laser);
                     lasers.splice(i, 1);
@@ -621,21 +640,21 @@
             update(dt, time) {
                 if(!this.alive) return;
                 this.phaseX += this.freqX * dt;
-                const noiseX = Math.sin(this.phaseX) * (2 + Math.random());
-                const noiseZ = Math.cos(this.phaseX * 0.7) * 1.5;
+                const noiseX = Math.sin(this.phaseX) * (2.5 + Math.random() * 1.5);
+                const noiseZ = Math.cos(this.phaseX * 0.7) * 2.0;
                 const dir = new THREE.Vector3().subVectors(this.targetPos, this.position);
                 const dist = dir.length();
                 if(dist > 0.5) {
                     dir.normalize();
-                    const speed = this.chasing ? 5.5 : (3.2 + Math.sin(time * 2) * 1.0);
+                    const speed = this.chasing ? CONFIG.chaseSpeed : (CONFIG.enemySpeed + Math.sin(time * 2) * 1.5);
                     this.position.addScaledVector(dir, speed * dt);
                 } else {
                     if(this.chasing) this.chasing = false;
                     this.pickNewTarget();
                 }
-                this.position.x += noiseX * dt * 1.5;
-                this.position.z += noiseZ * dt * 1.5;
-                this.position.y += Math.sin(time * 3 + this.phaseX) * 0.15 * dt;
+                this.position.x += noiseX * dt * 2.0;
+                this.position.z += noiseZ * dt * 2.0;
+                this.position.y += Math.sin(time * 3 + this.phaseX) * 0.2 * dt;
                 this.position.x = Math.max(-18, Math.min(18, this.position.x));
                 this.position.z = Math.max(-18, Math.min(18, this.position.z));
                 this.position.y = Math.max(1, Math.min(7, this.position.y));
@@ -682,9 +701,16 @@
             die() {
                 this.alive = false;
                 Audio.playExplode();
-                LevelMgr.addParticleBurst(this.position, this.color, 20);
+                LevelMgr.addParticleBurst(this.position, this.color, 25);
                 STATE.score += 100;
                 document.getElementById('score-display').textContent = `SCORE: ${STATE.score}`;
+                
+                // Add explosion flash
+                const flash = document.getElementById('flash-overlay');
+                flash.style.background = `rgba(${this.color >> 16 & 0xff},${this.color >> 8 & 0xff},${this.color & 0xff},0.2)`;
+                flash.style.opacity = 0.25;
+                setTimeout(() => flash.style.opacity = 0, 80);
+                
                 scene.remove(this.mesh);
                 scene.remove(this.hpBar);
                 this.mesh.geometry.dispose();
@@ -738,20 +764,27 @@
             const indicator = document.getElementById('powerup-indicator');
             if(type === 'shield') {
                 STATE.shieldActive = true;
-                STATE.shieldTimer = 10;
+                STATE.shieldTimer = 12;
                 document.getElementById('shield-hud').style.display = 'block';
                 indicator.textContent = '🛡️ SHIELD!';
             } else if(type === 'rapidfire') {
                 STATE.rapidFire = true;
-                STATE.rapidFireTimer = 8;
+                STATE.rapidFireTimer = 10;
                 indicator.textContent = '⚡ RAPID FIRE!';
             } else {
                 saucer.energy = saucer.maxEnergy;
                 indicator.textContent = '🔋 ENERGY FULL!';
             }
+            
+            // Add powerup collection effect
+            const flash = document.getElementById('flash-overlay');
+            flash.style.background = type === 'shield' ? 'rgba(68,136,255,0.25)' : type === 'rapidfire' ? 'rgba(255,255,0,0.25)' : 'rgba(0,255,68,0.25)';
+            flash.style.opacity = 0.3;
+            setTimeout(() => flash.style.opacity = 0, 100);
+            
             indicator.style.opacity = 1;
-            setTimeout(() => indicator.style.opacity = 0, 1500);
-            STATE.score += 50;
+            setTimeout(() => indicator.style.opacity = 0, 1800);
+            STATE.score += 75;
             document.getElementById('score-display').textContent = `SCORE: ${STATE.score}`;
         }
 
@@ -947,7 +980,7 @@
                 if(!STATE.playing) return;
                 STATE.enemySpawnTimer += dt * 1000;
                 const maxE = CONFIG.baseEnemyCount + (STATE.cycle - 1);
-                if(STATE.enemySpawnTimer > 6000 && STATE.enemies.length < maxE) { this.spawnEnemy(); STATE.enemySpawnTimer = 0; }
+                if(STATE.enemySpawnTimer > CONFIG.enemySpawnInterval && STATE.enemies.length < maxE) { this.spawnEnemy(); STATE.enemySpawnTimer = 0; }
                 for(const e of STATE.enemies) e.update(dt, time);
                 STATE.enemies = STATE.enemies.filter(e => e.alive);
                 document.getElementById('enemy-count').textContent = `ENEMIES: ${STATE.enemies.length}`;
@@ -978,6 +1011,13 @@
                     STATE.enemies.forEach(e => { if(e.alive) e.die(); });
                     STATE.score += 500;
                     document.getElementById('score-display').textContent = `SCORE: ${STATE.score}`;
+                    
+                    // Level complete flash effect
+                    const flash = document.getElementById('flash-overlay');
+                    flash.style.background = 'rgba(0,255,255,0.3)';
+                    flash.style.opacity = 0.4;
+                    setTimeout(() => flash.style.opacity = 0, 150);
+                    
                     STATE.xp += STATE.xpPerCycle;
                     if(STATE.xp >= STATE.xpMax) {
                         STATE.xp -= STATE.xpMax; STATE.cycle++; STATE.xpPerCycle += 25;
@@ -1042,8 +1082,15 @@
                         LevelMgr.addParticleBurst(obj.position, obj.userData.activateColor, 12);
                         STATE.score += 50;
                         document.getElementById('score-display').textContent = `SCORE: ${STATE.score}`;
-                        // Random powerup spawn chance
-                        if(Math.random() < 0.15) spawnPowerup(obj.position.clone());
+                        // Random powerup spawn chance - increased probability
+                        if(Math.random() < 0.2) spawnPowerup(obj.position.clone());
+                        
+                        // Add activation flash effect
+                        const flash = document.getElementById('flash-overlay');
+                        flash.style.background = `rgba(${obj.userData.activateColor >> 16 & 0xff},${obj.userData.activateColor >> 8 & 0xff},${obj.userData.activateColor & 0xff},0.15)`;
+                        flash.style.opacity = 0.2;
+                        setTimeout(() => flash.style.opacity = 0, 70);
+                        
                         this.updateProgress();
                     }
                 });
@@ -1240,11 +1287,19 @@
 
         // --- MAIN LOOP ---
         const clock = new THREE.Clock();
+        let lastPerfUpdate = 0;
+        
         function animate() {
             requestAnimationFrame(animate);
             const dt = Math.min(clock.getDelta(), CONFIG.maxDt);
             const time = clock.getElapsedTime();
             STATE.time = time;
+
+            // Performance monitoring (update every second)
+            if(time - lastPerfUpdate > 1) {
+                lastPerfUpdate = time;
+                // Could add FPS counter here if needed
+            }
 
             let inputX = 0, inputZ = 0;
             
@@ -1267,13 +1322,13 @@
             updateLasers(dt);
             updatePowerups(dt, time);
 
-            // Laser-enemy collision
+            // Laser-enemy collision with better hit detection
             for(let i = lasers.length - 1; i >= 0; i--) {
                 const laser = lasers[i];
                 let hit = false;
                 for(const enemy of STATE.enemies) {
                     if(!enemy.alive) continue;
-                    if(laser.position.distanceTo(enemy.position) < 1.0) {
+                    if(laser.position.distanceTo(enemy.position) < 1.2) {
                         enemy.takeDamage();
                         scene.remove(laser);
                         lasers.splice(i, 1);
@@ -1282,10 +1337,9 @@
                     }
                 }
                 if(hit) continue;
-                // Laser-saucer collision (enemy lasers would go here)
             }
 
-            // Enemy-saucer collision
+            // Enemy-saucer collision with invincibility frames
             if(!saucer.invincible && STATE.playing) {
                 for(const enemy of STATE.enemies) {
                     if(!enemy.alive) continue;
