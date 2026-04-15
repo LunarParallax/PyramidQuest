@@ -269,6 +269,8 @@
         const CONFIG = {
             pixelRatio: Math.min(window.devicePixelRatio, 1.5),
             bloomStrength: 2.0, bloomRadius: 0.35, bloomThreshold: 0.08,
+            maxDt: 0.033, particleCount: 150, baseEnemyCount: 2, loadingDuration: 800,
+            saucerSpeed: 80, saucerMaxSpeed: 35, saucerDamping: 0.92, laserCooldown: 0.12, laserSpeed: 90,
             maxDt: 0.05, particleCount: 150, baseEnemyCount: 2, loadingDuration: 2200,
             saucerSpeed: 18, saucerMaxSpeed: 28, saucerDamping: 0.9, laserCooldown: 0.15, laserSpeed: 80,
             activationRadius: 3.0
@@ -548,10 +550,10 @@
                 }
                 // Animate glow
                 this.glowMat.opacity = 0.1 + Math.sin(time * 4) * 0.08;
-                // Camera follow with smooth lerp
-                const camTarget = new THREE.Vector3(this.mesh.position.x * 0.25, this.mesh.position.y + 7, this.mesh.position.z + 12);
-                camera.position.lerp(camTarget, 0.04);
-                camera.lookAt(this.mesh.position.x * 0.4, this.mesh.position.y - 0.5, this.mesh.position.z);
+                // Camera follow with smooth lerp - improved responsiveness
+                const camTarget = new THREE.Vector3(this.mesh.position.x * 0.3, this.mesh.position.y + 8, this.mesh.position.z + 14);
+                camera.position.lerp(camTarget, 0.08);
+                camera.lookAt(this.mesh.position.x * 0.3, this.mesh.position.y, this.mesh.position.z);
                 // Screen shake decay
                 if(STATE.screenShake > 0) {
                     STATE.screenShake -= dt * 5;
@@ -702,7 +704,7 @@
                 const dist = dir.length();
                 if(dist > 0.5) {
                     dir.normalize();
-                    const speed = this.chasing ? 2.5 : (1.5 + Math.sin(time * 2) * 0.5);
+                    const speed = this.chasing ? 4.5 : (2.5 + Math.sin(time * 2) * 0.8);
                     this.position.addScaledVector(dir, speed * dt);
                 } else {
                     if(this.chasing) this.chasing = false;
@@ -916,7 +918,7 @@
                     setTimeout(() => flash.style.opacity = 0, 60);
                     document.getElementById('loading-overlay').style.display = 'none';
                     const cnt = CONFIG.baseEnemyCount + (STATE.cycle - 1);
-                    for(let i = 0; i < cnt; i++) setTimeout(() => this.spawnEnemy(), i * 500);
+                    for(let i = 0; i < cnt; i++) setTimeout(() => this.spawnEnemy(), i * 300);
                     STATE.playing = true;
                 }
             },
