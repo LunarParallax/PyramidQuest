@@ -180,10 +180,10 @@
         
         const CONFIG = {
             pixelRatio: Math.min(window.devicePixelRatio, 1.5),
-            bloomStrength: 2.0, bloomRadius: 0.35, bloomThreshold: 0.08,
-            maxDt: 0.033, particleCount: 150, baseEnemyCount: 2, loadingDuration: 800,
-            saucerSpeed: 80, saucerMaxSpeed: 35, saucerDamping: 0.92, laserCooldown: 0.12, laserSpeed: 90,
-            activationRadius: 3.0
+            bloomStrength: 2.2, bloomRadius: 0.4, bloomThreshold: 0.06,
+            maxDt: 0.033, particleCount: 180, baseEnemyCount: 2, loadingDuration: 600,
+            saucerSpeed: 95, saucerMaxSpeed: 42, saucerDamping: 0.91, laserCooldown: 0.1, laserSpeed: 110,
+            activationRadius: 3.5
         };
 
         const LEVELS = [
@@ -247,9 +247,9 @@
                     o.start(t); o.stop(t+dur);
                 } catch(e) {}
             },
-            playLaser() { this.play(900, 'sawtooth', 0.06, 0.06); },
-            playHit() { this.play(180, 'square', 0.12, 0.08); },
-            playEnemyHit() { this.play(350, 'sawtooth', 0.15, 0.1); },
+            playLaser() { this.play(1000, 'sawtooth', 0.08, 0.08); },
+            playHit() { this.play(150, 'square', 0.15, 0.1); },
+            playEnemyHit() { this.play(400, 'sawtooth', 0.12, 0.12); },
             playExplode() {
                 if(!this.ctx) return;
                 try {
@@ -363,7 +363,7 @@
         const composer = new THREE.EffectComposer(renderer);
         composer.addPass(new THREE.RenderPass(scene, camera));
         const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), CONFIG.bloomStrength, CONFIG.bloomRadius, CONFIG.bloomThreshold);
-        bloomPass.resolutionScale = 0.5;
+        bloomPass.resolutionScale = 0.6;
         composer.addPass(bloomPass);
 
         // Lights
@@ -381,7 +381,7 @@
 
         // --- SAUCER ---
         const saucer = {
-            mesh: null, velocity: new THREE.Vector3(), energy: 100, maxEnergy: 100, energyRegen: 18,
+            mesh: null, velocity: new THREE.Vector3(), energy: 100, maxEnergy: 100, energyRegen: 24,
             shieldHP: 0, shieldMax: 3, invincible: false,
             init() {
                 const group = new THREE.Group();
@@ -436,15 +436,19 @@
                 if(speed > CONFIG.saucerMaxSpeed) this.velocity.multiplyScalar(CONFIG.saucerMaxSpeed / speed);
                 this.velocity.multiplyScalar(CONFIG.saucerDamping);
                 this.mesh.position.addScaledVector(this.velocity, dt);
-                // Bounds
+                
+                // Smooth rotation towards movement direction
+                const targetRotZ = -this.velocity.x * 0.03;
+                const targetRotX = this.velocity.z * 0.02;
+                this.mesh.rotation.z += (targetRotZ - this.mesh.rotation.z) * 0.15;
+                this.mesh.rotation.x += (targetRotX - this.mesh.rotation.x) * 0.15;
+                
+                // Bounds checking
                 this.mesh.position.x = Math.max(-18, Math.min(18, this.mesh.position.x));
                 this.mesh.position.z = Math.max(-18, Math.min(18, this.mesh.position.z));
                 this.mesh.position.y = Math.max(1.5, Math.min(7, this.mesh.position.y));
-                // Tilt
-                this.mesh.rotation.z = -this.velocity.x * 0.025;
-                this.mesh.rotation.x = this.velocity.z * 0.015;
                 // Hover
-                this.mesh.position.y += Math.sin(time * 3) * 0.002;
+                this.mesh.position.y += Math.sin(time * 3) * 0.003;
                 // Energy regen
                 this.energy = Math.min(this.maxEnergy, this.energy + this.energyRegen * dt);
                 document.getElementById('energy-bar-fill').style.width = (this.energy / this.maxEnergy * 100) + '%';
@@ -466,9 +470,13 @@
                 // Animate glow
                 this.glowMat.opacity = 0.1 + Math.sin(time * 4) * 0.08;
                 // Camera follow with smooth lerp - improved responsiveness
-                const camTarget = new THREE.Vector3(this.mesh.position.x * 0.3, this.mesh.position.y + 8, this.mesh.position.z + 14);
-                camera.position.lerp(camTarget, 0.08);
-                camera.lookAt(this.mesh.position.x * 0.3, this.mesh.position.y, this.mesh.position.z);
+                const camTarget = new THREE.Vector3(
+                    this.mesh.position.x * 0.35, 
+                    this.mesh.position.y + 9, 
+                    this.mesh.position.z + 16
+                );
+                camera.position.lerp(camTarget, 0.1);
+                camera.lookAt(this.mesh.position.x * 0.2, this.mesh.position.y + 1, this.mesh.position.z);
                 // Screen shake decay
                 if(STATE.screenShake > 0) {
                     STATE.screenShake -= dt * 5;
@@ -619,7 +627,7 @@
                 const dist = dir.length();
                 if(dist > 0.5) {
                     dir.normalize();
-                    const speed = this.chasing ? 4.5 : (2.5 + Math.sin(time * 2) * 0.8);
+                    const speed = this.chasing ? 5.5 : (3.2 + Math.sin(time * 2) * 1.0);
                     this.position.addScaledVector(dir, speed * dt);
                 } else {
                     if(this.chasing) this.chasing = false;
@@ -939,7 +947,7 @@
                 if(!STATE.playing) return;
                 STATE.enemySpawnTimer += dt * 1000;
                 const maxE = CONFIG.baseEnemyCount + (STATE.cycle - 1);
-                if(STATE.enemySpawnTimer > 8000 && STATE.enemies.length < maxE) { this.spawnEnemy(); STATE.enemySpawnTimer = 0; }
+                if(STATE.enemySpawnTimer > 6000 && STATE.enemies.length < maxE) { this.spawnEnemy(); STATE.enemySpawnTimer = 0; }
                 for(const e of STATE.enemies) e.update(dt, time);
                 STATE.enemies = STATE.enemies.filter(e => e.alive);
                 document.getElementById('enemy-count').textContent = `ENEMIES: ${STATE.enemies.length}`;
