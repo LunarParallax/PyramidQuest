@@ -1351,16 +1351,26 @@
         });
 
         // --- START ---
-        document.getElementById('start-overlay').addEventListener('click', function() {
-            this.style.opacity = 0;
+        const startOverlay = document.getElementById('start-overlay');
+        
+        function startGame(e) {
+            if (e) e.preventDefault();
+            startOverlay.style.pointerEvents = 'none';
+            startOverlay.style.opacity = 0;
             setTimeout(() => {
-                this.style.display = 'none';
+                startOverlay.style.display = 'none';
                 document.getElementById('hud').style.display = 'block';
                 Audio.init();
                 saucer.init();
                 saucer.mesh.position.set(0, 3, 0);
                 LevelMgr.build(1);
-            }, 400);
+            }, 500);
+        }
+        
+        startOverlay.addEventListener('click', startGame);
+        startOverlay.addEventListener('touchstart', startGame, { passive: false });
+        startOverlay.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') startGame(e);
         });
 
         window.addEventListener('resize', () => {
