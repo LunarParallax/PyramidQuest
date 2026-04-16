@@ -267,18 +267,11 @@
         'use strict';
         
         const CONFIG = {
-            pixelRatio: Math.min(window.devicePixelRatio, 2),
-            bloomStrength: 2.5, bloomRadius: 0.5, bloomThreshold: 0.05,
-            maxDt: 0.04, particleCount: 220, baseEnemyCount: 2, loadingDuration: 900,
-            saucerSpeed: 120, saucerMaxSpeed: 55, saucerDamping: 0.89, laserCooldown: 0.08, laserSpeed: 140,
-            activationRadius: 4.0, enemySpawnInterval: 4000, enemySpeed: 6.5, chaseSpeed: 8.0
             pixelRatio: Math.min(window.devicePixelRatio, 1.5),
             bloomStrength: 2.0, bloomRadius: 0.35, bloomThreshold: 0.08,
             maxDt: 0.033, particleCount: 150, baseEnemyCount: 2, loadingDuration: 800,
             saucerSpeed: 80, saucerMaxSpeed: 35, saucerDamping: 0.92, laserCooldown: 0.12, laserSpeed: 90,
-            maxDt: 0.05, particleCount: 150, baseEnemyCount: 2, loadingDuration: 2200,
-            saucerSpeed: 18, saucerMaxSpeed: 28, saucerDamping: 0.9, laserCooldown: 0.15, laserSpeed: 80,
-            activationRadius: 3.0
+            activationRadius: 3.0, enemySpawnInterval: 4000, enemySpeed: 6.5, chaseSpeed: 8.0
         };
 
         const LEVELS = [
@@ -457,8 +450,7 @@
 
         const composer = new THREE.EffectComposer(renderer);
         composer.addPass(new THREE.RenderPass(scene, camera));
-        const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), CONFIG.bloomStrength, CONFIG.bloomRadius, CONFIG.bloomThreshold);
-        bloomPass.resolutionScale = 0.6;
+        const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth * 0.5, window.innerHeight * 0.5), CONFIG.bloomStrength, CONFIG.bloomRadius, CONFIG.bloomThreshold);
         composer.addPass(bloomPass);
 
         // Lights
@@ -756,9 +748,12 @@
                 this.hpBar.position.copy(this.position);
                 this.hpBar.position.y += 1;
                 this.hpBar.lookAt(camera.position);
-                // Corrupt
+                // Corrupt with squared distance check
                 if(this.corrupting && this.corruptCooldown <= 0) {
-                    if(this.position.distanceTo(this.corrupting.position) < 2.5) {
+                    const dx = this.position.x - this.corrupting.position.x;
+                    const dy = this.position.y - this.corrupting.position.y;
+                    const dz = this.position.z - this.corrupting.position.z;
+                    if(dx*dx + dy*dy + dz*dz < 6.25) {
                         this.corruptTimer += dt;
                         if(this.corruptTimer > 2) {
                             this.corruptObject(this.corrupting);
@@ -833,15 +828,18 @@
             powerups.push(mesh);
         }
         function updatePowerups(dt, time) {
+            const saucerPos = saucer.mesh.position;
             for(let i = powerups.length - 1; i >= 0; i--) {
                 const pu = powerups[i];
                 pu.rotation.y += dt * 2;
                 pu.position.y += Math.sin(time * 3 + i) * 0.01;
                 pu.userData.life -= dt;
-                if(pu.userData.life <= 0 || saucer.mesh.position.distanceTo(pu.position) < 1.5) {
-                    if(saucer.mesh.position.distanceTo(pu.position) < 1.5) {
-                        collectPowerup(pu.userData.type);
-                    }
+                const dx = saucerPos.x - pu.position.x;
+                const dy = saucerPos.y - pu.position.y;
+                const dz = saucerPos.z - pu.position.z;
+                const distSq = dx*dx + dy*dy + dz*dz;
+                if(pu.userData.life <= 0 || distSq < 2.25) {
+                    if(distSq < 2.25) collectPowerup(pu.userData.type);
                     scene.remove(pu);
                     pu.geometry.dispose();
                     pu.material.dispose();
@@ -953,7 +951,10 @@
                     );
                     const sc = eased;
                     lm.mesh.scale.set(sc, sc, sc);
-                    if(lm.mesh.position.distanceTo(t) > 0.5) allDone = false;
+                    const dx = lm.mesh.position.x - t.x;
+                    const dy = lm.mesh.position.y - t.y;
+                    const dz = lm.mesh.position.z - t.z;
+                    if(dx*dx + dy*dy + dz*dz > 0.25) allDone = false;
                 });
                 document.getElementById('loading-text').textContent = `ASSEMBLING... ${Math.floor(p*100)}%`;
                 document.getElementById('loading-bar-fill').style.width = `${Math.floor(p*100)}%`;
@@ -1058,7 +1059,8 @@
                     burst.material.opacity = life;
                     requestAnimationFrame(animate);
                 };
-                animate();
+                // Batch particle burst animations to reduce RAF calls
+                setTimeout(animate, 0);
             },
             
             spawnEnemy() {
@@ -1161,9 +1163,13 @@
             checkActivations() {
                 if(!STATE.playing) return;
                 const sp = saucer.mesh.position;
+                const activationRadiusSq = CONFIG.activationRadius * CONFIG.activationRadius;
                 this.clickables.forEach(obj => {
                     if(obj.userData.active) return;
-                    if(sp.distanceTo(obj.position) < CONFIG.activationRadius) {
+                    const dx = sp.x - obj.position.x;
+                    const dy = sp.y - obj.position.y;
+                    const dz = sp.z - obj.position.z;
+                    if(dx*dx + dy*dy + dz*dz < activationRadiusSq) {
                         obj.userData.active = true;
                         obj.material.color.copy(obj.userData.activateColor);
                         obj.material.emissive = new THREE.Color(obj.userData.activateColor);
@@ -1361,7 +1367,7 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-            composer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth * 0.5, window.innerHeight * 0.5);
         });
 
         // --- MAIN LOOP ---
@@ -1401,13 +1407,17 @@
             updateLasers(dt);
             updatePowerups(dt, time);
 
-            // Laser-enemy collision with better hit detection
+            // Laser-enemy collision with squared distance for performance
             for(let i = lasers.length - 1; i >= 0; i--) {
                 const laser = lasers[i];
                 let hit = false;
+                const laserPos = laser.position;
                 for(const enemy of STATE.enemies) {
                     if(!enemy.alive) continue;
-                    if(laser.position.distanceTo(enemy.position) < 1.2) {
+                    const dx = laserPos.x - enemy.position.x;
+                    const dy = laserPos.y - enemy.position.y;
+                    const dz = laserPos.z - enemy.position.z;
+                    if(dx*dx + dy*dy + dz*dz < 1.44) {
                         enemy.takeDamage();
                         scene.remove(laser);
                         lasers.splice(i, 1);
@@ -1418,11 +1428,15 @@
                 if(hit) continue;
             }
 
-            // Enemy-saucer collision with invincibility frames
+            // Enemy-saucer collision with invincibility frames using squared distance
             if(!saucer.invincible && STATE.playing) {
+                const saucerPos = saucer.mesh.position;
                 for(const enemy of STATE.enemies) {
                     if(!enemy.alive) continue;
-                    if(enemy.position.distanceTo(saucer.mesh.position) < 1.5) {
+                    const dx = enemy.position.x - saucerPos.x;
+                    const dy = enemy.position.y - saucerPos.y;
+                    const dz = enemy.position.z - saucerPos.z;
+                    if(dx*dx + dy*dy + dz*dz < 2.25) {
                         saucer.hit();
                         break;
                     }
