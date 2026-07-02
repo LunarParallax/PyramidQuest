@@ -267,11 +267,11 @@
         'use strict';
         
         const CONFIG = {
-            pixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
-            bloomStrength: 1.8, bloomRadius: 0.3, bloomThreshold: 0.1,
-            maxDt: 0.033, particleCount: 100, baseEnemyCount: 2, loadingDuration: 600,
+            pixelRatio: Math.min(window.devicePixelRatio, 1.5),
+            bloomStrength: 2.0, bloomRadius: 0.35, bloomThreshold: 0.08,
+            maxDt: 0.033, particleCount: 150, baseEnemyCount: 2, loadingDuration: 800,
             saucerSpeed: 80, saucerMaxSpeed: 35, saucerDamping: 0.92, laserCooldown: 0.12, laserSpeed: 90,
-            activationRadius: 3.0, enemySpawnInterval: 4500, enemySpeed: 6.0, chaseSpeed: 7.5
+            activationRadius: 3.0, enemySpawnInterval: 4000, enemySpeed: 6.5, chaseSpeed: 8.0
         };
 
         const LEVELS = [
@@ -1020,17 +1020,15 @@
             },
             
             updateParticles(dt, time) {
-                for(let i = this.particleSystems.length - 1; i >= 0; i--) {
-                    const ps = this.particleSystems[i];
-                    if(!ps.visible) { scene.remove(ps); ps.geometry.dispose(); ps.material.dispose(); this.particleSystems.splice(i, 1); continue; }
+                for(const ps of this.particleSystems) {
                     const pos = ps.geometry.attributes.position.array;
                     const vel = ps.geometry.userData.vel;
                     const cnt = pos.length / 3;
-                    for(let j=0; j<cnt; j++) {
-                        pos[j*3] += vel[j*3] + Math.sin(time*0.4+j)*0.002;
-                        pos[j*3+1] += vel[j*3+1];
-                        pos[j*3+2] += vel[j*3+2] + Math.cos(time*0.4+j)*0.002;
-                        if(pos[j*3+1] > 15) { pos[j*3]=(Math.random()-0.5)*35; pos[j*3+1]=0; pos[j*3+2]=(Math.random()-0.5)*35; }
+                    for(let i=0; i<cnt; i++) {
+                        pos[i*3] += vel[i*3] + Math.sin(time*0.4+i)*0.002;
+                        pos[i*3+1] += vel[i*3+1];
+                        pos[i*3+2] += vel[i*3+2] + Math.cos(time*0.4+i)*0.002;
+                        if(pos[i*3+1] > 15) { pos[i*3]=(Math.random()-0.5)*35; pos[i*3+1]=0; pos[i*3+2]=(Math.random()-0.5)*35; }
                     }
                     ps.geometry.attributes.position.needsUpdate = true;
                 }
@@ -1075,20 +1073,24 @@
                 STATE.enemySpawnTimer += dt * 1000;
                 const maxE = CONFIG.baseEnemyCount + (STATE.cycle - 1);
                 if(STATE.enemySpawnTimer > CONFIG.enemySpawnInterval && STATE.enemies.length < maxE) { this.spawnEnemy(); STATE.enemySpawnTimer = 0; }
-                for(let i = 0, len = STATE.enemies.length; i < len; i++) STATE.enemies[i].update(dt, time);
-                let aliveCount = 0;
-                for(let i = STATE.enemies.length - 1; i >= 0; i--) {
-                    if(!STATE.enemies[i].alive) { STATE.enemies.splice(i, 1); } else { aliveCount++; }
-                }
-                document.getElementById('enemy-count').textContent = `ENEMIES: ${aliveCount}`;
+                for(const e of STATE.enemies) e.update(dt, time);
+                STATE.enemies = STATE.enemies.filter(e => e.alive);
+                document.getElementById('enemy-count').textContent = `ENEMIES: ${STATE.enemies.length}`;
             },
             
             updateProgress() {
                 let cur = 0;
-                const typeMap = {1:'tree',2:'arch',3:'fountain',4:'platform',5:'artifact',6:'crystal',7:'sundial',8:'ice',9:'lava',10:'star'};
-                const targetType = typeMap[STATE.currentLevel];
-                for(let i = 0, len = this.clickables.length; i < len; i++) {
-                    if(this.clickables[i].userData.type === targetType && this.clickables[i].userData.active) cur++;
+                switch(STATE.currentLevel) {
+                    case 1: cur = this.clickables.filter(m=>m.userData.type==='tree'&&m.userData.active).length; break;
+                    case 2: cur = this.clickables.filter(m=>m.userData.type==='arch'&&m.userData.active).length; break;
+                    case 3: cur = this.clickables.filter(m=>m.userData.type==='fountain'&&m.userData.active).length; break;
+                    case 4: cur = this.clickables.filter(m=>m.userData.type==='platform'&&m.userData.active).length; break;
+                    case 5: cur = this.clickables.filter(m=>m.userData.type==='artifact'&&m.userData.active).length; break;
+                    case 6: cur = this.clickables.filter(m=>m.userData.type==='crystal'&&m.userData.active).length; break;
+                    case 7: cur = this.clickables.filter(m=>m.userData.type==='sundial'&&m.userData.active).length; break;
+                    case 8: cur = this.clickables.filter(m=>m.userData.type==='ice'&&m.userData.active).length; break;
+                    case 9: cur = this.clickables.filter(m=>m.userData.type==='lava'&&m.userData.active).length; break;
+                    case 10: cur = this.clickables.filter(m=>m.userData.type==='star'&&m.userData.active).length; break;
                 }
                 STATE.progress = cur;
                 document.getElementById('progress').textContent = `${STATE.progress}/${STATE.target}`;
@@ -1162,29 +1164,32 @@
                 if(!STATE.playing) return;
                 const sp = saucer.mesh.position;
                 const activationRadiusSq = CONFIG.activationRadius * CONFIG.activationRadius;
-                for(let i = 0, len = this.clickables.length; i < len; i++) {
-                    const obj = this.clickables[i];
-                    if(obj.userData.active) continue;
+                this.clickables.forEach(obj => {
+                    if(obj.userData.active) return;
                     const dx = sp.x - obj.position.x;
                     const dy = sp.y - obj.position.y;
                     const dz = sp.z - obj.position.z;
                     if(dx*dx + dy*dy + dz*dz < activationRadiusSq) {
                         obj.userData.active = true;
                         obj.material.color.copy(obj.userData.activateColor);
-                        obj.material.emissive.setHex(obj.userData.activateColor);
+                        obj.material.emissive = new THREE.Color(obj.userData.activateColor);
                         obj.material.emissiveIntensity = 0.8;
                         Audio.playActivate();
                         LevelMgr.addParticleBurst(obj.position, obj.userData.activateColor, 12);
                         STATE.score += 50;
                         document.getElementById('score-display').textContent = `SCORE: ${STATE.score}`;
+                        // Random powerup spawn chance - increased probability
                         if(Math.random() < 0.2) spawnPowerup(obj.position.clone());
+                        
+                        // Add activation flash effect
                         const flash = document.getElementById('flash-overlay');
                         flash.style.background = `rgba(${obj.userData.activateColor >> 16 & 0xff},${obj.userData.activateColor >> 8 & 0xff},${obj.userData.activateColor & 0xff},0.15)`;
                         flash.style.opacity = 0.2;
                         setTimeout(() => flash.style.opacity = 0, 70);
+                        
                         this.updateProgress();
                     }
-                }
+                });
             },
             
             // Level generators
@@ -1346,26 +1351,16 @@
         });
 
         // --- START ---
-        const startOverlay = document.getElementById('start-overlay');
-        
-        function startGame(e) {
-            if (e) e.preventDefault();
-            startOverlay.style.pointerEvents = 'none';
-            startOverlay.style.opacity = 0;
+        document.getElementById('start-overlay').addEventListener('click', function() {
+            this.style.opacity = 0;
             setTimeout(() => {
-                startOverlay.style.display = 'none';
+                this.style.display = 'none';
                 document.getElementById('hud').style.display = 'block';
                 Audio.init();
                 saucer.init();
                 saucer.mesh.position.set(0, 3, 0);
                 LevelMgr.build(1);
-            }, 500);
-        }
-        
-        startOverlay.addEventListener('click', startGame);
-        startOverlay.addEventListener('touchstart', startGame, { passive: false });
-        startOverlay.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') startGame(e);
+            }, 400);
         });
 
         window.addEventListener('resize', () => {
@@ -1417,8 +1412,7 @@
                 const laser = lasers[i];
                 let hit = false;
                 const laserPos = laser.position;
-                for(let j = 0, eLen = STATE.enemies.length; j < eLen; j++) {
-                    const enemy = STATE.enemies[j];
+                for(const enemy of STATE.enemies) {
                     if(!enemy.alive) continue;
                     const dx = laserPos.x - enemy.position.x;
                     const dy = laserPos.y - enemy.position.y;
@@ -1437,8 +1431,7 @@
             // Enemy-saucer collision with invincibility frames using squared distance
             if(!saucer.invincible && STATE.playing) {
                 const saucerPos = saucer.mesh.position;
-                for(let j = 0, eLen = STATE.enemies.length; j < eLen; j++) {
-                    const enemy = STATE.enemies[j];
+                for(const enemy of STATE.enemies) {
                     if(!enemy.alive) continue;
                     const dx = enemy.position.x - saucerPos.x;
                     const dy = enemy.position.y - saucerPos.y;
